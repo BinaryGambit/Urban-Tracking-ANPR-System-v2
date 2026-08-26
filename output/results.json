@@ -1,0 +1,20 @@
+{
+    "image": "test_dh_car_front.jpg",
+    "processed_at": "2026-08-26T02:03:23.140208",
+    "total_plates": 1,
+    "detections": [
+        {
+            "plate": "KA51 Z 5526",
+            "detector_confidence": 0.7990279197692871,
+            "ocr_confidence": 0.9638209939002991,
+            "bounding_box": {
+                "x1": 296,
+                "y1": 652,
+                "x2": 502,
+                "y2": 700
+            },
+            "crop": "output\\crops\\plate_001.jpg",
+            "timestamp": "2026-08-26T02:03:23.121403"
+        }
+    ]
+}

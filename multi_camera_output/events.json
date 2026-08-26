@@ -1,0 +1,50 @@
+{
+    "system": "Multi-Camera ANPR",
+    "created_at": "2026-08-26T02:14:47.713",
+    "camera_count": 1,
+    "total_events": 3,
+    "events": [
+        {
+            "camera_id": "CAM_01",
+            "plate": "1",
+            "timestamp": "2026-08-26T02:14:11.608",
+            "detection_confidence": 0.37284550070762634,
+            "ocr_confidence": 0.7434799671173096,
+            "bounding_box": {
+                "x1": 971,
+                "y1": 868,
+                "x2": 1066,
+                "y2": 1002
+            },
+            "crop": "multi_camera_output\\crops\\CAM_01_00001_1.jpg"
+        },
+        {
+            "camera_id": "CAM_01",
+            "plate": "CA01CONNECTE",
+            "timestamp": "2026-08-26T02:14:19.843",
+            "detection_confidence": 0.30772337317466736,
+            "ocr_confidence": 0.9803209900856018,
+            "bounding_box": {
+                "x1": 0,
+                "y1": 0,
+                "x2": 321,
+                "y2": 397
+            },
+            "crop": "multi_camera_output\\crops\\CAM_01_00002_CA01CONNECTE.jpg"
+        },
+        {
+            "camera_id": "CAM_01",
+            "plate": "CA01CONNECT",
+            "timestamp": "2026-08-26T02:14:33.589",
+            "detection_confidence": 0.20703591406345367,
+            "ocr_confidence": 0.9778108596801758,
+            "bounding_box": {
+                "x1": 0,
+                "y1": 0,
+                "x2": 325,
+                "y2": 401
+            },
+            "crop": "multi_camera_output\\crops\\CAM_01_00003_CA01CONNECT.jpg"
+        }
+    ]
+}

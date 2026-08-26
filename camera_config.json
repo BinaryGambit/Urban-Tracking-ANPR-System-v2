@@ -1,0 +1,13 @@
+{
+    "CAM_01": {
+        "latitude": 15.37073 ,
+        "longitude": 75.133287,
+        "name": "Camera 01"
+    },
+
+    "CAM_02": {
+        "latitude": 15.351838,
+        "longitude": 75.137985,
+        "name": "Camera 02"
+    }
+}
