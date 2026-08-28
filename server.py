@@ -23,7 +23,7 @@ Run:
     python server.py
 
 Then open:
-    http://localhost:5001/Website/sihweb4.html
+    http://localhost:5001/Website/sihweb.html
 """
 
 import json
