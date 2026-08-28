@@ -652,11 +652,44 @@ function Overview({ goTo, liveData }) {
    2. ANPR / OCR MODULE
    ====================================================================== */
 
+/* Where the Flask backend (server.py) lives relative to this page.
+   The page is served from <project-root>/Website/sihweb4.html, and
+   server.py serves the whole project root as static files, so a
+   plain "../" gets us back to the root for both API calls and assets. */
+const API_BASE = "../api/anpr";
+const assetUrl = (p) => (p ? `../${p}` : null);
+
+/* Pulls whatever anpr.py / server.py has appended to output/results.json
+   so real, already-processed detections show up alongside the demo
+   samples. Fails silently (empty list) if the file isn't reachable,
+   e.g. when the page is opened as a local file:// instead of served
+   by server.py. */
+function useAnprResults() {
+  const [state, setState] = useState({ status: "loading", detections: [] });
+  useEffect(() => {
+    let cancelled = false;
+    fetch("../output/results.json")
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((json) => {
+        if (cancelled) return;
+        setState({ status: "live", detections: json.detections || [] });
+      })
+      .catch(() => { if (!cancelled) setState({ status: "unavailable", detections: [] }); });
+    return () => { cancelled = true; };
+  }, []);
+  return state;
+}
+
 function AnprModule() {
   const theme = React.useContext(ThemeContext);
   const [selected, setSelected] = useState(null);
   const [stage, setStage] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState(null);
+  const fileInputRef = useRef(null);
   const stages = ["Detecting plate region", "Cropping & normalizing", "Enhancing image", "Running OCR", "Validating format"];
+
+  const liveResults = useAnprResults();
 
   useEffect(() => {
     if (!selected) return;
@@ -670,16 +703,46 @@ function AnprModule() {
 
   const done = selected && stage >= stages.length;
 
+  async function handleFile(file) {
+    if (!file) return;
+    setUploadError(null);
+    setUploading(true);
+    setSelected(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`${API_BASE}/upload`, { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+
+      const top = (data.detections && data.detections[0]) || null;
+      setSelected({
+        id: "upload",
+        label: file.name,
+        plate: top ? top.plate || "UNREADABLE" : "NO PLATE DETECTED",
+        confidence: top ? Math.round((top.ocr_confidence || 0) * 100) : 0,
+        condition: null,
+        real: true,
+        imageUrl: assetUrl(data.annotated),
+        totalPlates: data.total_plates,
+      });
+    } catch (err) {
+      setUploadError(err.message || "Could not reach the ANPR server. Is server.py running?");
+    } finally {
+      setUploading(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <SectionHeader eyebrow="Module 01" icon={ScanLine} title="High-Accuracy ANPR / OCR Engine"
-        desc="Pick a sample capture (simulating a real camera frame) and watch the recognition pipeline run end-to-end." />
+        desc="Pick a sample capture, upload a real photo, or replay a past detection — the recognition pipeline runs end-to-end." />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {ANPR_SAMPLES.map((s) => (
           <button key={s.id} onClick={() => setSelected(s)}
             className={`group rounded-xl border p-2.5 text-left transition ${selected?.id === s.id ? `border-${theme.c500} bg-${theme.c500}/10` : "border-slate-800 bg-slate-900/40 hover:border-slate-600"}`}>
-            <div className={`relative h-16 w-full overflow-hidden rounded-lg bg-gradient-to-br ${s.gradient.replace("cyan-950", theme.c950)}`}>
+            <div className={`sample-thumb relative h-16 w-full overflow-hidden rounded-lg bg-gradient-to-br ${s.gradient.replace("cyan-950", theme.c950)}`}>
               <div className="absolute inset-0 opacity-30" style={{ backgroundImage: "repeating-linear-gradient(45deg, rgba(255,255,255,0.06) 0 2px, transparent 2px 6px)" }} />
               <div className="absolute bottom-1 left-1 rounded bg-slate-950/70 px-1 py-0.5 font-data text-[7px] text-slate-300">{s.plate}</div>
             </div>
@@ -688,16 +751,60 @@ function AnprModule() {
         ))}
       </div>
 
+      {liveResults.detections.length > 0 && (
+        <div>
+          <div className="mb-2 flex items-center gap-2">
+            <span className="font-data text-[11px] uppercase tracking-widest text-slate-500">Recent Real Detections</span>
+            <Badge tone="emerald">Live from output/results.json</Badge>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            {liveResults.detections.slice(-6).reverse().map((d, i) => (
+              <button key={i} onClick={() => setSelected({
+                id: `live-${i}`, label: d.plate || "Unreadable", plate: d.plate || "UNREADABLE",
+                confidence: Math.round((d.ocr_confidence || 0) * 100), condition: null,
+                real: true, imageUrl: assetUrl(d.crop),
+              })}
+                className={`group rounded-xl border p-2.5 text-left transition ${selected?.id === `live-${i}` ? `border-${theme.c500} bg-${theme.c500}/10` : "border-slate-800 bg-slate-900/40 hover:border-slate-600"}`}>
+                <div className="relative h-16 w-full overflow-hidden rounded-lg bg-slate-950">
+                  {d.crop && <img src={assetUrl(d.crop)} alt={d.plate} className="h-full w-full object-cover" />}
+                </div>
+                <div className="mt-2 truncate text-[11px] font-medium text-slate-300">{d.plate || "Unreadable"}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-5">
         <GlassCard className="p-5 lg:col-span-3">
           <div className="mb-3 flex items-center justify-between">
             <span className="font-data text-[11px] uppercase tracking-widest text-slate-500">Camera Frame Preview</span>
-            {selected && <Badge tone={done ? "emerald" : "cyan"}>{done ? "Processed" : "Processing…"}</Badge>}
+            {uploading && <Badge tone="cyan">Uploading…</Badge>}
+            {selected && !uploading && <Badge tone={done ? "emerald" : "cyan"}>{done ? "Processed" : "Processing…"}</Badge>}
           </div>
-          {!selected ? (
-            <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-slate-700 text-slate-500">
+
+          <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
+            onChange={(e) => handleFile(e.target.files?.[0])} />
+
+          {!selected && !uploading ? (
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => { e.preventDefault(); handleFile(e.dataTransfer.files?.[0]); }}
+              className="flex h-64 cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-slate-700 text-slate-500 transition hover:border-slate-500">
               <Upload size={28} />
-              <p className="text-sm">Select a sample above, or imagine dropping your own frame here</p>
+              <p className="text-sm">Select a sample above, or click / drop a real photo here</p>
+              {uploadError && <p className="max-w-xs text-center text-xs text-rose-400">{uploadError}</p>}
+            </div>
+          ) : uploading ? (
+            <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-xl border border-slate-700 text-slate-400">
+              <Loader2 size={28} className="animate-spin" />
+              <p className="text-sm">Running YOLO detector + PaddleOCR…</p>
+            </div>
+          ) : selected.imageUrl ? (
+            <div className="relative h-64 overflow-hidden rounded-xl bg-slate-950">
+              <img src={selected.imageUrl} alt={selected.plate} className="h-full w-full object-contain" />
+              <div className="absolute right-3 top-3 rounded bg-slate-950/70 px-2 py-1 font-data text-[9px] text-slate-300">REAL FRAME</div>
             </div>
           ) : (
             <div className={`relative h-64 overflow-hidden rounded-xl bg-gradient-to-br ${selected.gradient.replace("cyan-950", theme.c950)}`}>
@@ -758,9 +865,13 @@ function AnprModule() {
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Badge tone="emerald">State: TN — Tamil Nadu</Badge>
+                    {selected.real ? (
+                      <Badge tone="cyan">Source: Live ANPR pipeline</Badge>
+                    ) : (
+                      <Badge tone="emerald">State: TN — Tamil Nadu</Badge>
+                    )}
                     {selected.condition && <Badge tone="amber">Condition: {selected.condition}</Badge>}
-                    <Badge tone="cyan">Checksum Valid</Badge>
+                    {!selected.real && <Badge tone="cyan">Checksum Valid</Badge>}
                   </div>
                 </div>
               )}
@@ -1298,6 +1409,10 @@ function App() {
         .anpr-root.light .bg-slate-700\\/30 { background-color: #e9e1cd !important; }
 
         .anpr-root.light .bg-slate-500 { background-color: #cabfa4 !important; }
+
+        .anpr-root.light .sample-thumb { background: #ffffff !important; }
+        .anpr-root.light .sample-thumb > div:first-child { opacity: 0.5; }
+        .anpr-root.light .sample-thumb .bg-slate-950\\/70 { background-color: rgba(255,255,255,0.85) !important; color: #2a251d !important; }
 
         /* borders */
         .anpr-root.light .border-slate-800,
