@@ -234,13 +234,37 @@ const PIPELINE = [
 ];
 
 /* ======================================================================
+   THEME SYSTEM — accent color is swappable at runtime
+   ====================================================================== */
+
+const THEMES = {
+  cyan: {
+    key: "cyan", label: "Cyan", dot: "bg-cyan-400",
+    c200: "cyan-200", c300: "cyan-300", c400: "cyan-400", c500: "cyan-500", c700: "cyan-700", c950: "cyan-950",
+    hex: "#22d3ee", rgb: "34,211,238",
+  },
+  amber: {
+    key: "amber", label: "Amber", dot: "bg-amber-400",
+    c200: "amber-200", c300: "amber-300", c400: "amber-400", c500: "amber-500", c700: "amber-700", c950: "amber-950",
+    hex: "#fbbf24", rgb: "251,191,36",
+  },
+  violet: {
+    key: "violet", label: "Violet", dot: "bg-violet-400",
+    c200: "violet-200", c300: "violet-300", c400: "violet-400", c500: "violet-500", c700: "violet-700", c950: "violet-950",
+    hex: "#a78bfa", rgb: "167,139,250",
+  },
+};
+const ThemeContext = React.createContext(THEMES.cyan);
+
+/* ======================================================================
    SMALL UI PRIMITIVES
    ====================================================================== */
 
 function GlassCard({ children, className = "", glow = false }) {
+  const theme = React.useContext(ThemeContext);
   return (
     <div
-      className={`relative rounded-2xl border border-slate-800/80 bg-slate-900/40 backdrop-blur-xl ${glow ? "shadow-[0_0_40px_-12px_rgba(34,211,238,0.35)]" : ""} ${className}`}
+      className={`relative rounded-2xl border border-slate-800/80 bg-slate-900/40 backdrop-blur-xl ${glow ? `shadow-[0_0_40px_-12px_rgba(${theme.rgb},0.35)]` : ""} ${className}`}
     >
       {children}
     </div>
@@ -248,16 +272,17 @@ function GlassCard({ children, className = "", glow = false }) {
 }
 
 function SectionHeader({ eyebrow, title, desc, icon: Icon }) {
+  const theme = React.useContext(ThemeContext);
   return (
     <div className="mb-6 flex items-start gap-3">
       {Icon && (
-        <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-cyan-500/30 bg-cyan-500/10 text-cyan-400">
+        <div className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-${theme.c500}/30 bg-${theme.c500}/10 text-${theme.c400}`}>
           <Icon size={19} />
         </div>
       )}
       <div>
         {eyebrow && (
-          <div className="font-data text-[11px] tracking-[0.2em] text-cyan-400/80 uppercase">{eyebrow}</div>
+          <div className={`font-data text-[11px] tracking-[0.2em] text-${theme.c400}/80 uppercase`}>{eyebrow}</div>
         )}
         <h2 className="font-display text-xl font-semibold text-slate-100 md:text-2xl">{title}</h2>
         {desc && <p className="mt-1 max-w-2xl text-sm text-slate-400">{desc}</p>}
@@ -267,8 +292,9 @@ function SectionHeader({ eyebrow, title, desc, icon: Icon }) {
 }
 
 function Badge({ children, tone = "cyan" }) {
+  const theme = React.useContext(ThemeContext);
   const tones = {
-    cyan: "bg-cyan-500/10 text-cyan-300 border-cyan-500/30",
+    cyan: `bg-${theme.c500}/10 text-${theme.c300} border-${theme.c500}/30`,
     amber: "bg-amber-500/10 text-amber-300 border-amber-500/30",
     rose: "bg-rose-500/10 text-rose-300 border-rose-500/30",
     emerald: "bg-emerald-500/10 text-emerald-300 border-emerald-500/30",
@@ -291,6 +317,7 @@ function severityTone(sev) {
    ====================================================================== */
 
 function CityMap({ highlightPath = [], mode = "default", height = 420, activeCamera = null, onNodeClick = null }) {
+  const theme = React.useContext(ThemeContext);
   const pathSet = new Set(highlightPath.map((h) => h.camera || h));
   const pathIds = highlightPath.map((h) => h.camera || h);
 
@@ -309,7 +336,7 @@ function CityMap({ highlightPath = [], mode = "default", height = 420, activeCam
             </feMerge>
           </filter>
           <marker id="arrowHead" markerWidth="8" markerHeight="8" refX="5" refY="3" orient="auto">
-            <path d="M0,0 L6,3 L0,6 Z" fill="#22d3ee" />
+            <path d="M0,0 L6,3 L0,6 Z" fill={theme.hex} />
           </marker>
         </defs>
 
@@ -328,7 +355,7 @@ function CityMap({ highlightPath = [], mode = "default", height = 420, activeCam
         {/* density heat glow */}
         {mode === "density" && CAMERAS.map((c) => {
           const d = ZONE_DENSITY[c.zone] ?? 0.3;
-          const color = d > 0.75 ? "#f43f5e" : d > 0.5 ? "#f59e0b" : d > 0.3 ? "#22d3ee" : "#34d399";
+          const color = d > 0.75 ? "#f43f5e" : d > 0.5 ? "#f59e0b" : d > 0.3 ? theme.hex : "#34d399";
           return (
             <circle key={"heat" + c.id} cx={c.x} cy={c.y} r={18 + d * 32} fill={color} opacity={0.16 + d * 0.18} />
           );
@@ -340,7 +367,7 @@ function CityMap({ highlightPath = [], mode = "default", height = 420, activeCam
           if (!A || !B) return null;
           return (
             <line key={"hl" + i} x1={A.x} y1={A.y} x2={B.x} y2={B.y}
-              stroke="#22d3ee" strokeWidth="3.5" strokeLinecap="round"
+              stroke={theme.hex} strokeWidth="3.5" strokeLinecap="round"
               markerEnd="url(#arrowHead)" opacity="0.95">
               <animate attributeName="stroke-dasharray" from="0,12" to="12,0" dur="0.6s" begin={`${i * 0.15}s`} fill="freeze" />
             </line>
@@ -355,13 +382,13 @@ function CityMap({ highlightPath = [], mode = "default", height = 420, activeCam
           return (
             <g key={c.id} onClick={() => onNodeClick && onNodeClick(c.id)} style={{ cursor: onNodeClick ? "pointer" : "default" }}>
               {(inPath || isActive) && (
-                <circle cx={c.x} cy={c.y} r={isActive ? 13 : 9} fill="none" stroke="#22d3ee" strokeWidth="1.5" opacity="0.6">
+                <circle cx={c.x} cy={c.y} r={isActive ? 13 : 9} fill="none" stroke={theme.hex} strokeWidth="1.5" opacity="0.6">
                   <animate attributeName="r" values={`${isActive ? 13 : 9};${isActive ? 20 : 15};${isActive ? 13 : 9}`} dur="2s" repeatCount="indefinite" />
                   <animate attributeName="opacity" values="0.6;0;0.6" dur="2s" repeatCount="indefinite" />
                 </circle>
               )}
               <circle cx={c.x} cy={c.y} r={inPath ? 6 : 4.5}
-                fill={inPath ? "#22d3ee" : "#64748b"}
+                fill={inPath ? theme.hex : "#64748b"}
                 stroke={inPath ? "#0891b2" : "#1e293b"}
                 strokeWidth="1.5"
                 filter={inPath ? "url(#nodeGlow)" : undefined} />
@@ -381,7 +408,7 @@ function CityMap({ highlightPath = [], mode = "default", height = 420, activeCam
       {mode === "density" && (
         <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/80 px-3 py-1.5 font-data text-[10px] text-slate-400">
           <span className="h-2 w-2 rounded-full bg-emerald-400" /> Free
-          <span className="ml-2 h-2 w-2 rounded-full bg-cyan-400" /> Moderate
+          <span className={`ml-2 h-2 w-2 rounded-full bg-${theme.c400}`} /> Moderate
           <span className="ml-2 h-2 w-2 rounded-full bg-amber-400" /> Heavy
           <span className="ml-2 h-2 w-2 rounded-full bg-rose-500" /> Gridlock
         </div>
@@ -402,8 +429,9 @@ function CityMap({ highlightPath = [], mode = "default", height = 420, activeCam
    ====================================================================== */
 
 function Overview({ goTo }) {
+  const theme = React.useContext(ThemeContext);
   const stats = [
-    { icon: Camera, label: "ANPR Cameras Networked", value: "500+", tone: "cyan" },
+    { icon: Camera, label: "ANPR Cameras Networked", value: "500+", tone: theme.key },
     { icon: BadgeCheck, label: "OCR Recognition Accuracy", value: ">90%", tone: "emerald" },
     { icon: Zap, label: "Trajectory Update Latency", value: "<2 sec", tone: "blue" },
     { icon: Radar, label: "Junctions Monitored City-Wide", value: "180+", tone: "amber" },
@@ -411,12 +439,12 @@ function Overview({ goTo }) {
   return (
     <div className="space-y-8">
       <GlassCard glow className="overflow-hidden p-6 md:p-10">
-        <div className="pointer-events-none absolute -top-24 -right-24 h-72 w-72 rounded-full bg-cyan-500/10 blur-3xl" />
+        <div className={`pointer-events-none absolute -top-24 -right-24 h-72 w-72 rounded-full bg-${theme.c500}/10 blur-3xl`} />
         <div className="pointer-events-none absolute -bottom-24 -left-16 h-72 w-72 rounded-full bg-blue-500/10 blur-3xl" />
         <div className="relative">
           <Badge tone="cyan">Smart India Hackathon 2026 · Smart Automation</Badge>
           <h1 className="font-display mt-4 max-w-3xl text-3xl font-bold leading-tight text-slate-50 md:text-5xl">
-            City-Wide AI Engine for <span className="text-cyan-400">Multi-Camera ANPR</span> Trajectory Tracking &amp; Urban Traffic Analytics
+            City-Wide AI Engine for <span className={`text-${theme.c400}`}>Multi-Camera ANPR</span> Trajectory Tracking &amp; Urban Traffic Analytics
           </h1>
           <p className="mt-4 max-w-2xl text-base text-slate-400">
             A single AI pipeline that reads every number plate crossing 500+ city cameras, re-identifies the same
@@ -424,10 +452,10 @@ function Overview({ goTo }) {
             traffic intelligence and instant alerts.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
-            <button onClick={() => goTo("trajectory")} className="flex items-center gap-2 rounded-lg bg-cyan-500 px-4 py-2.5 font-medium text-slate-950 transition hover:bg-cyan-400">
+            <button onClick={() => goTo("trajectory")} className={`flex items-center gap-2 rounded-lg bg-${theme.c500} px-4 py-2.5 font-medium text-slate-950 transition hover:bg-${theme.c400}`}>
               Track a Vehicle <ArrowRight size={16} />
             </button>
-            <button onClick={() => goTo("analytics")} className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900/60 px-4 py-2.5 font-medium text-slate-200 transition hover:border-cyan-500/50">
+            <button onClick={() => goTo("analytics")} className={`flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900/60 px-4 py-2.5 font-medium text-slate-200 transition hover:border-${theme.c500}/50`}>
               View City Analytics <ChevronRight size={16} />
             </button>
           </div>
@@ -464,7 +492,7 @@ function Overview({ goTo }) {
           {PIPELINE.map((p, i) => (
             <React.Fragment key={i}>
               <div className="flex flex-1 flex-col items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/50 p-4 text-center">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-cyan-500/30 bg-cyan-500/10 text-cyan-400">
+                <div className={`flex h-12 w-12 items-center justify-center rounded-xl border border-${theme.c500}/30 bg-${theme.c500}/10 text-${theme.c400}`}>
                   <p.icon size={22} />
                 </div>
                 <div>
@@ -474,7 +502,7 @@ function Overview({ goTo }) {
               </div>
               {i < PIPELINE.length - 1 && (
                 <div className="hidden shrink-0 items-center justify-center px-1 md:flex">
-                  <ArrowRight className="text-cyan-500/50" size={20} />
+                  <ArrowRight className={`text-${theme.c500}/50`} size={20} />
                 </div>
               )}
             </React.Fragment>
@@ -490,6 +518,7 @@ function Overview({ goTo }) {
    ====================================================================== */
 
 function AnprModule() {
+  const theme = React.useContext(ThemeContext);
   const [selected, setSelected] = useState(null);
   const [stage, setStage] = useState(0);
   const stages = ["Detecting plate region", "Cropping & normalizing", "Enhancing image", "Running OCR", "Validating format"];
@@ -514,8 +543,8 @@ function AnprModule() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {ANPR_SAMPLES.map((s) => (
           <button key={s.id} onClick={() => setSelected(s)}
-            className={`group rounded-xl border p-2.5 text-left transition ${selected?.id === s.id ? "border-cyan-500 bg-cyan-500/10" : "border-slate-800 bg-slate-900/40 hover:border-slate-600"}`}>
-            <div className={`relative h-16 w-full overflow-hidden rounded-lg bg-gradient-to-br ${s.gradient}`}>
+            className={`group rounded-xl border p-2.5 text-left transition ${selected?.id === s.id ? `border-${theme.c500} bg-${theme.c500}/10` : "border-slate-800 bg-slate-900/40 hover:border-slate-600"}`}>
+            <div className={`relative h-16 w-full overflow-hidden rounded-lg bg-gradient-to-br ${s.gradient.replace("cyan-950", theme.c950)}`}>
               <div className="absolute inset-0 opacity-30" style={{ backgroundImage: "repeating-linear-gradient(45deg, rgba(255,255,255,0.06) 0 2px, transparent 2px 6px)" }} />
               <div className="absolute bottom-1 left-1 rounded bg-slate-950/70 px-1 py-0.5 font-data text-[7px] text-slate-300">{s.plate}</div>
             </div>
@@ -536,7 +565,7 @@ function AnprModule() {
               <p className="text-sm">Select a sample above, or imagine dropping your own frame here</p>
             </div>
           ) : (
-            <div className={`relative h-64 overflow-hidden rounded-xl bg-gradient-to-br ${selected.gradient}`}>
+            <div className={`relative h-64 overflow-hidden rounded-xl bg-gradient-to-br ${selected.gradient.replace("cyan-950", theme.c950)}`}>
               <div className="absolute inset-0 opacity-25" style={{ backgroundImage: "repeating-linear-gradient(45deg, rgba(255,255,255,0.06) 0 2px, transparent 2px 6px)" }} />
               {selected.condition === "Motion Blur" && <div className="absolute inset-0 backdrop-blur-[2px]" />}
               {/* mock vehicle silhouette */}
@@ -548,11 +577,11 @@ function AnprModule() {
               {/* bounding box after detection stage */}
               {stage >= 1 && (
                 <div className="absolute left-1/2 top-1/2 h-12 w-40 -translate-x-1/2 translate-y-0.5 -translate-y-1">
-                  <div className="absolute inset-0 animate-pulse rounded-sm border-2 border-cyan-400" />
+                  <div className={`absolute inset-0 animate-pulse rounded-sm border-2 border-${theme.c400}`} />
                   {["-top-1 -left-1", "-top-1 -right-1", "-bottom-1 -left-1", "-bottom-1 -right-1"].map((pos, i) => (
-                    <div key={i} className={`absolute ${pos} h-2.5 w-2.5 border-cyan-300`} />
+                    <div key={i} className={`absolute ${pos} h-2.5 w-2.5 border-${theme.c300}`} />
                   ))}
-                  <div className="absolute -top-5 left-0 rounded bg-cyan-500 px-1.5 py-0.5 font-data text-[9px] font-bold text-slate-950">PLATE</div>
+                  <div className={`absolute -top-5 left-0 rounded bg-${theme.c500} px-1.5 py-0.5 font-data text-[9px] font-bold text-slate-950`}>PLATE</div>
                 </div>
               )}
               <div className="absolute right-3 top-3 rounded bg-slate-950/70 px-2 py-1 font-data text-[9px] text-slate-300">{selected.id.toUpperCase()} · 1920×1080</div>
@@ -572,9 +601,9 @@ function AnprModule() {
                 return (
                   <div key={i} className="flex items-center gap-3">
                     {complete ? <CheckCircle2 size={16} className="shrink-0 text-emerald-400" />
-                      : active ? <Loader2 size={16} className="shrink-0 animate-spin text-cyan-400" />
+                      : active ? <Loader2 size={16} className={`shrink-0 animate-spin text-${theme.c400}`} />
                         : <div className="h-4 w-4 shrink-0 rounded-full border border-slate-700" />}
-                    <span className={`text-sm ${complete ? "text-slate-300" : active ? "text-cyan-300" : "text-slate-600"}`}>{s}</span>
+                    <span className={`text-sm ${complete ? "text-slate-300" : active ? `text-${theme.c300}` : "text-slate-600"}`}>{s}</span>
                   </div>
                 );
               })}
@@ -583,14 +612,14 @@ function AnprModule() {
                 <div className="mt-5 space-y-4 border-t border-slate-800 pt-4">
                   <div>
                     <div className="font-data text-[10px] uppercase tracking-widest text-slate-500">Recognized Plate</div>
-                    <div className="font-data mt-1 text-2xl font-bold text-cyan-300">{selected.plate}</div>
+                    <div className={`font-data mt-1 text-2xl font-bold text-${theme.c300}`}>{selected.plate}</div>
                   </div>
                   <div>
                     <div className="mb-1 flex justify-between font-data text-[10px] text-slate-500">
                       <span>Confidence Score</span><span>{selected.confidence}%</span>
                     </div>
                     <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
-                      <div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-emerald-400" style={{ width: `${selected.confidence}%` }} />
+                      <div className={`h-full rounded-full bg-gradient-to-r from-${theme.c500} to-emerald-400`} style={{ width: `${selected.confidence}%` }} />
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -613,6 +642,7 @@ function AnprModule() {
    ====================================================================== */
 
 function TrajectoryTracking({ query, setQuery }) {
+  const theme = React.useContext(ThemeContext);
   const [active, setActive] = useState(null);
   const [hoverIdx, setHoverIdx] = useState(null);
 
@@ -643,7 +673,7 @@ function TrajectoryTracking({ query, setQuery }) {
           <div className="flex flex-wrap gap-2">
             {samplePlates.map((p) => (
               <button key={p} onClick={() => setQuery(p)}
-                className="font-data rounded-md border border-slate-700 bg-slate-900/60 px-2.5 py-1.5 text-[11px] text-slate-400 transition hover:border-cyan-500/50 hover:text-cyan-300">
+                className={`font-data rounded-md border border-slate-700 bg-slate-900/60 px-2.5 py-1.5 text-[11px] text-slate-400 transition hover:border-${theme.c500}/50 hover:text-${theme.c300}`}>
                 {p.replace(/(TN\d{2})([A-Z]+)(\d+)/, "$1 $2 $3")}
               </button>
             ))}
@@ -669,15 +699,15 @@ function TrajectoryTracking({ query, setQuery }) {
                 return (
                   <button key={i} onMouseEnter={() => setHoverIdx(i)} onMouseLeave={() => setHoverIdx(null)}
                     onClick={() => setActive(c.id)}
-                    className={`flex w-full items-start gap-3 rounded-lg border p-3 text-left transition ${hoverIdx === i || active === c.id ? "border-cyan-500/50 bg-cyan-500/5" : "border-slate-800 bg-slate-950/40"}`}>
+                    className={`flex w-full items-start gap-3 rounded-lg border p-3 text-left transition ${hoverIdx === i || active === c.id ? `border-${theme.c500}/50 bg-${theme.c500}/5` : "border-slate-800 bg-slate-950/40"}`}>
                     <div className="flex flex-col items-center pt-0.5">
-                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/15 font-data text-[10px] font-bold text-cyan-300">{i + 1}</div>
+                      <div className={`flex h-6 w-6 items-center justify-center rounded-full bg-${theme.c500}/15 font-data text-[10px] font-bold text-${theme.c300}`}>{i + 1}</div>
                       {i < hits.length - 1 && <div className="mt-1 h-6 w-px bg-slate-700" />}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
                         <span className="truncate text-sm font-medium text-slate-200">{c.name}</span>
-                        <span className="font-data shrink-0 text-[11px] text-cyan-400">{h.time}</span>
+                        <span className={`font-data shrink-0 text-[11px] text-${theme.c400}`}>{h.time}</span>
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 font-data text-[10.5px] text-slate-500">
                         <span className="flex items-center gap-1"><MapPin size={10} />{c.id}</span>
@@ -715,13 +745,14 @@ function TrajectoryTracking({ query, setQuery }) {
    4. CITY TRAFFIC ANALYTICS
    ====================================================================== */
 
-function speedColor(v) {
+function speedColor(v, theme) {
   if (v < 18) return "#f43f5e";
   if (v < 25) return "#f59e0b";
-  return "#22d3ee";
+  return theme.hex;
 }
 
 function TrafficAnalytics() {
+  const theme = React.useContext(ThemeContext);
   return (
     <div className="space-y-6">
       <SectionHeader eyebrow="Module 03" icon={Gauge} title="City Traffic Analytics Dashboard"
@@ -752,7 +783,7 @@ function TrafficAnalytics() {
                   </div>
                 </div>
                 <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
-                  <div className="h-full rounded-full" style={{ width: `${b.score}%`, background: b.score > 80 ? "#f43f5e" : b.score > 60 ? "#f59e0b" : "#22d3ee" }} />
+                  <div className="h-full rounded-full" style={{ width: `${b.score}%`, background: b.score > 80 ? "#f43f5e" : b.score > 60 ? "#f59e0b" : theme.hex }} />
                 </div>
               </div>
             ))}
@@ -770,7 +801,7 @@ function TrafficAnalytics() {
               <YAxis tick={{ fontSize: 10, fill: "#64748b" }} axisLine={false} tickLine={false} />
               <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 8, fontSize: 12 }} labelStyle={{ color: "#94a3b8" }} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Line type="monotone" dataKey="inbound" stroke="#22d3ee" strokeWidth={2} dot={false} name="Inbound" />
+              <Line type="monotone" dataKey="inbound" stroke={theme.hex} strokeWidth={2} dot={false} name="Inbound" />
               <Line type="monotone" dataKey="outbound" stroke="#3b82f6" strokeWidth={2} dot={false} name="Outbound" />
             </LineChart>
           </ResponsiveContainer>
@@ -785,7 +816,7 @@ function TrafficAnalytics() {
               <YAxis tick={{ fontSize: 10, fill: "#64748b" }} axisLine={false} tickLine={false} />
               <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: 8, fontSize: 12 }} cursor={{ fill: "rgba(148,163,184,0.06)" }} />
               <Bar dataKey="speed" radius={[4, 4, 0, 0]}>
-                {ZONE_SPEEDS.map((z, i) => <Cell key={i} fill={speedColor(z.speed)} />)}
+                {ZONE_SPEEDS.map((z, i) => <Cell key={i} fill={speedColor(z.speed, theme)} />)}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
@@ -801,11 +832,11 @@ function TrafficAnalytics() {
               <div key={i} className="flex items-center gap-3">
                 <div className="flex w-full max-w-[13rem] shrink-0 items-center gap-1.5 text-xs text-slate-300 sm:max-w-xs">
                   <span className="truncate">{f.from}</span>
-                  <ArrowRight size={12} className="shrink-0 text-cyan-500" />
+                  <ArrowRight size={12} className={`shrink-0 text-${theme.c500}`} />
                   <span className="truncate">{f.to}</span>
                 </div>
                 <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-800">
-                  <div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400" style={{ width: `${(f.volume / max) * 100}%` }} />
+                  <div className={`h-full rounded-full bg-gradient-to-r from-blue-500 to-${theme.c400}`} style={{ width: `${(f.volume / max) * 100}%` }} />
                 </div>
                 <span className="font-data w-16 shrink-0 text-right text-xs text-slate-400">{f.volume.toLocaleString("en-IN")}</span>
               </div>
@@ -822,6 +853,7 @@ function TrafficAnalytics() {
    ====================================================================== */
 
 function AlertSystem({ onTrack }) {
+  const theme = React.useContext(ThemeContext);
   const [tab, setTab] = useState("all");
   const [notified, setNotified] = useState({});
 
@@ -845,7 +877,7 @@ function AlertSystem({ onTrack }) {
           { id: "anomaly", label: "Route Anomalies", count: ANOMALY_ALERTS.length },
         ].map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition ${tab === t.id ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-300" : "border-slate-800 bg-slate-900/40 text-slate-400 hover:border-slate-600"}`}>
+            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition ${tab === t.id ? `border-${theme.c500}/50 bg-${theme.c500}/10 text-${theme.c300}` : "border-slate-800 bg-slate-900/40 text-slate-400 hover:border-slate-600"}`}>
             {t.label} <span className="font-data text-[10px] opacity-70">{t.count}</span>
           </button>
         ))}
@@ -875,7 +907,7 @@ function AlertSystem({ onTrack }) {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <button onClick={() => onTrack(r.plate)} className="font-data text-xs font-semibold text-cyan-300 underline decoration-cyan-700 decoration-dotted underline-offset-2 hover:text-cyan-200">
+                    <button onClick={() => onTrack(r.plate)} className={`font-data text-xs font-semibold text-${theme.c300} underline decoration-${theme.c700} decoration-dotted underline-offset-2 hover:text-${theme.c200}`}>
                       {r.plate}
                     </button>
                   </td>
@@ -908,6 +940,7 @@ function AlertSystem({ onTrack }) {
    ====================================================================== */
 
 function AboutTeam() {
+  const theme = React.useContext(ThemeContext);
   const members = [
     { role: "Team Leader: EE26BT002", name: "Waqar Ahmad Khan" },
     { role: "IS26BSM02", name: "Sairaj Dilip Vernekar" },
@@ -929,7 +962,7 @@ function AboutTeam() {
 
       <GlassCard className="p-6">
         <div className="font-data text-[11px] uppercase tracking-widest text-slate-500">Team Name</div>
-        <div className="font-display mt-1 text-2xl font-bold text-cyan-300">BinaryGambit</div>
+        <div className={`font-display mt-1 text-2xl font-bold text-${theme.c300}`}>BinaryGambit</div>
         <p className="mt-2 text-sm italic text-slate-400">— where code meets strategy.</p>
         <p className="mt-3 max-w-2xl text-sm text-slate-400">
           A team of innovative minds combining technical expertise, logical thinking, and strategic
@@ -944,7 +977,7 @@ function AboutTeam() {
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
           {members.map((m, i) => (
             <div key={i} className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/40 p-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cyan-500/10 font-display text-sm font-bold text-cyan-300">
+              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-${theme.c500}/10 font-display text-sm font-bold text-${theme.c300}`}>
                 {m.name.replace(/[\[\]]/g, "").split(" ").map((w) => w[0]).join("").slice(0, 2)}
               </div>
               <div className="min-w-0">
@@ -962,7 +995,7 @@ function AboutTeam() {
           {Object.entries(stack).map(([cat, items]) => (
             <div key={cat}>
               <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-slate-300">
-                <ServerCog size={13} className="text-cyan-400" /> {cat}
+                <ServerCog size={13} className={`text-${theme.c400}`} /> {cat}
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {items.map((it) => <Badge key={it} tone="slate">{it}</Badge>)}
@@ -1008,7 +1041,27 @@ function useClock() {
   return now;
 }
 
+function ThemeSwitcher({ themeName, setThemeName, compact = false }) {
+  return (
+    <div className={`flex items-center gap-1.5 rounded-full border border-slate-800 bg-slate-900/60 p-1 ${compact ? "" : ""}`}>
+      {Object.values(THEMES).map((t) => (
+        <button
+          key={t.key}
+          onClick={() => setThemeName(t.key)}
+          title={t.label}
+          aria-label={`Switch to ${t.label} theme`}
+          className={`flex h-6 w-6 items-center justify-center rounded-full transition ${themeName === t.key ? "ring-2 ring-slate-300 ring-offset-2 ring-offset-slate-950" : "opacity-60 hover:opacity-100"}`}
+        >
+          <span className={`h-3.5 w-3.5 rounded-full ${t.dot}`} />
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function App() {
+  const [themeName, setThemeName] = useState("cyan");
+  const theme = THEMES[themeName];
   const [section, setSection] = useState("overview");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [trajQuery, setTrajQuery] = useState("TN07AB1234");
@@ -1018,6 +1071,7 @@ function App() {
   const trackPlate = (plate) => { setTrajQuery(plate); goTo("trajectory"); };
 
   return (
+    <ThemeContext.Provider value={theme}>
     <div className="anpr-root min-h-screen bg-slate-950 text-slate-200">
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap');
@@ -1029,7 +1083,7 @@ function App() {
         .anpr-root ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 8px; }
         .bg-scan {
           background-image:
-            radial-gradient(circle at 15% 10%, rgba(34,211,238,0.06), transparent 40%),
+            radial-gradient(circle at 15% 10%, rgba(${theme.rgb},0.06), transparent 40%),
             radial-gradient(circle at 85% 90%, rgba(59,130,246,0.07), transparent 40%);
         }
       `}</style>
@@ -1038,7 +1092,7 @@ function App() {
         {/* Sidebar (desktop) */}
         <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-slate-800/80 bg-slate-950/80 backdrop-blur-xl lg:flex">
           <div className="flex items-center gap-2.5 border-b border-slate-800/80 px-5 py-5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-400">
+            <div className={`flex h-9 w-9 items-center justify-center rounded-lg bg-${theme.c500}/10 text-${theme.c400}`}>
               <Radar size={20} />
             </div>
             <div>
@@ -1049,14 +1103,18 @@ function App() {
           <nav className="flex-1 space-y-1 px-3 py-4">
             {NAV.map((n) => (
               <button key={n.id} onClick={() => goTo(n.id)}
-                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition ${section === n.id ? "bg-cyan-500/10 text-cyan-300" : "text-slate-400 hover:bg-slate-900 hover:text-slate-200"}`}>
+                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition ${section === n.id ? `bg-${theme.c500}/10 text-${theme.c300}` : "text-slate-400 hover:bg-slate-900 hover:text-slate-200"}`}>
                 <n.icon size={17} />
                 {n.label}
-                {section === n.id && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-cyan-400" />}
+                {section === n.id && <span className={`ml-auto h-1.5 w-1.5 rounded-full bg-${theme.c400}`} />}
               </button>
             ))}
           </nav>
-          <div className="space-y-2 border-t border-slate-800/80 px-4 py-4">
+          <div className="space-y-3 border-t border-slate-800/80 px-4 py-4">
+            <div>
+              <div className="mb-1.5 font-data text-[9.5px] uppercase tracking-widest text-slate-600">Theme</div>
+              <ThemeSwitcher themeName={themeName} setThemeName={setThemeName} />
+            </div>
             <div className="flex items-center justify-between font-data text-[10px] text-slate-500">
               <span className="flex items-center gap-1.5"><Database size={11} /> DB SYNC</span>
               <span className="text-emerald-400">OK</span>
@@ -1075,15 +1133,19 @@ function App() {
             <aside className="absolute left-0 top-0 h-full w-64 border-r border-slate-800 bg-slate-950 p-4">
               <div className="mb-4 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Radar size={18} className="text-cyan-400" />
+                  <Radar size={18} className={`text-${theme.c400}`} />
                   <span className="font-display text-sm font-bold text-slate-100">TrackNet</span>
                 </div>
                 <button onClick={() => setMobileOpen(false)} className="text-slate-500"><X size={18} /></button>
               </div>
+              <div className="mb-4">
+                <div className="mb-1.5 font-data text-[9.5px] uppercase tracking-widest text-slate-600">Theme</div>
+                <ThemeSwitcher themeName={themeName} setThemeName={setThemeName} />
+              </div>
               <nav className="space-y-1">
                 {NAV.map((n) => (
                   <button key={n.id} onClick={() => goTo(n.id)}
-                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm ${section === n.id ? "bg-cyan-500/10 text-cyan-300" : "text-slate-400"}`}>
+                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm ${section === n.id ? `bg-${theme.c500}/10 text-${theme.c300}` : "text-slate-400"}`}>
                     <n.icon size={17} />{n.label}
                   </button>
                 ))}
@@ -1107,6 +1169,9 @@ function App() {
               </div>
             </div>
             <div className="flex items-center gap-3">
+              <div className="hidden lg:block">
+                <ThemeSwitcher themeName={themeName} setThemeName={setThemeName} compact />
+              </div>
               <div className="hidden items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 font-data text-[10px] text-emerald-300 sm:flex">
                 <span className="relative flex h-1.5 w-1.5">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
@@ -1135,6 +1200,7 @@ function App() {
         </div>
       </div>
     </div>
+    </ThemeContext.Provider>
   );
 }
 
