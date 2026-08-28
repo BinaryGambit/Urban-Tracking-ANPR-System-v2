@@ -25,7 +25,7 @@
 
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap');
-  html, body { background:#020617; margin:0; padding:0; }
+  html, body { background:#020617; margin:0; padding:0; transition: background 0.25s ease; }
   body { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; }
 </style>
 </head>
@@ -44,7 +44,7 @@ const {
   TrendingUp, TrendingDown, Navigation, Cpu, Database, Eye, Upload,
   ChevronRight, Sun, CloudFog, Wind, Loader2, ArrowRight, BadgeCheck, Car,
   Flag, Radar, Layers, Github, Linkedin, Mail, X, Menu, ChevronsRight,
-  CircleDot, Crosshair, SunDim, Sparkles, Signal, ServerCog,
+  CircleDot, Crosshair, SunDim, Sparkles, Signal, ServerCog, Moon,
 } = LucideReact;
 
 /* ======================================================================
@@ -234,6 +234,118 @@ const PIPELINE = [
 ];
 
 /* ======================================================================
+   LIVE DATA LAYER — fetches actual route_tracker.py / ANPR pipeline output
+   (camera_config.json, map_ouput/routes.json, multi_camera_output/events.json)
+   Falls back to the mock data above if the files can't be reached (e.g. the
+   page was opened as a local file:// instead of served over http).
+   ====================================================================== */
+
+function projectLiveCameras(camJson) {
+  const entries = Object.entries(camJson || {});
+  if (entries.length === 0) return { cameras: [], camMap: {} };
+
+  const lats = entries.map(([, c]) => c.latitude);
+  const lons = entries.map(([, c]) => c.longitude);
+  const latMin = Math.min(...lats), latMax = Math.max(...lats);
+  const lonMin = Math.min(...lons), lonMax = Math.max(...lons);
+  const latRange = latMax - latMin || 0.01;
+  const lonRange = lonMax - lonMin || 0.01;
+  const PAD = 80, W = 700, H = 500;
+
+  const cameras = entries.map(([id, c]) => ({
+    id,
+    name: c.name || id,
+    zone: "Field Deployment",
+    latitude: c.latitude,
+    longitude: c.longitude,
+    x: PAD + ((c.longitude - lonMin) / lonRange) * (W - PAD * 2),
+    // invert latitude so north renders toward the top of the SVG
+    y: H - PAD - ((c.latitude - latMin) / latRange) * (H - PAD * 2),
+  }));
+  const camMap = Object.fromEntries(cameras.map((c) => [c.id, c]));
+  return { cameras, camMap };
+}
+
+function liveRouteToHits(vehicle) {
+  const points = vehicle.route || [];
+  const transitions = vehicle.transitions || [];
+  return points.map((pt, i) => {
+    const trans = transitions[i] || transitions[i - 1] || null;
+    const d = new Date(pt.timestamp);
+    const time = isNaN(d.getTime())
+      ? "--:--"
+      : `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    return {
+      camera: pt.camera_id,
+      time,
+      speed: trans && trans.estimated_speed_kmph != null ? Math.round(trans.estimated_speed_kmph) : null,
+      confidence: null, // route_tracker.py's routes.json doesn't carry per-point OCR confidence
+    };
+  });
+}
+
+function useLiveData() {
+  const [state, setState] = useState({
+    status: "loading", // "loading" | "live" | "demo"
+    cameras: [],
+    camMap: {},
+    vehicles: [],
+    totalEvents: null,
+    totalVehiclesTracked: null,
+    avgOcrConfidence: null,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const [camRes, routesRes, eventsRes] = await Promise.all([
+          fetch("../camera_config.json"),
+          fetch("../map_ouput/routes.json"),
+          fetch("../multi_camera_output/events.json"),
+        ]);
+        if (!camRes.ok || !routesRes.ok || !eventsRes.ok) throw new Error("pipeline output not reachable");
+
+        const camJson = await camRes.json();
+        const routesJson = await routesRes.json();
+        const eventsJson = await eventsRes.json();
+
+        const { cameras, camMap } = projectLiveCameras(camJson);
+        if (cameras.length === 0) throw new Error("camera_config.json has no cameras");
+
+        const vehicles = (routesJson.vehicles || []).map((v) => ({
+          plate: v.plate,
+          hits: liveRouteToHits(v),
+        }));
+
+        const events = eventsJson.events || [];
+        const avgOcrConfidence = events.length
+          ? (events.reduce((sum, e) => sum + (e.ocr_confidence || 0), 0) / events.length) * 100
+          : null;
+
+        if (cancelled) return;
+        setState({
+          status: "live",
+          cameras,
+          camMap,
+          vehicles,
+          totalEvents: eventsJson.total_events ?? events.length,
+          totalVehiclesTracked: routesJson.total_vehicles ?? vehicles.length,
+          avgOcrConfidence,
+        });
+      } catch (err) {
+        if (cancelled) return;
+        setState((s) => ({ ...s, status: "demo" }));
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  return state;
+}
+
+/* ======================================================================
    THEME SYSTEM — accent color is swappable at runtime
    ====================================================================== */
 
@@ -252,6 +364,11 @@ const THEMES = {
     key: "violet", label: "Violet", dot: "bg-violet-400",
     c200: "violet-200", c300: "violet-300", c400: "violet-400", c500: "violet-500", c700: "violet-700", c950: "violet-950",
     hex: "#a78bfa", rgb: "167,139,250",
+  },
+  sunset: {
+    key: "sunset", label: "Sunset", dot: "bg-orange-400",
+    c200: "orange-200", c300: "orange-300", c400: "orange-400", c500: "orange-500", c700: "orange-700", c950: "orange-950",
+    hex: "#d97757", rgb: "217,119,87",
   },
 };
 const ThemeContext = React.createContext(THEMES.cyan);
@@ -316,7 +433,10 @@ function severityTone(sev) {
    CITY MAP (stylized SVG — shared "signature" component)
    ====================================================================== */
 
-function CityMap({ highlightPath = [], mode = "default", height = 420, activeCamera = null, onNodeClick = null }) {
+function CityMap({
+  highlightPath = [], mode = "default", height = 420, activeCamera = null, onNodeClick = null,
+  camerasList = CAMERAS, camMap = CAM, roads = ROADS,
+}) {
   const theme = React.useContext(ThemeContext);
   const pathSet = new Set(highlightPath.map((h) => h.camera || h));
   const pathIds = highlightPath.map((h) => h.camera || h);
@@ -343,9 +463,9 @@ function CityMap({ highlightPath = [], mode = "default", height = 420, activeCam
         <rect x="0" y="0" width="700" height="500" fill="url(#gridPattern)" />
 
         {/* base road network */}
-        {ROADS.map(([a, b], i) => {
-          const A = CAM[a], B = CAM[b];
-          const cx = (A.x / 700) * 700, cy = (A.y / 500) * 500;
+        {roads.map(([a, b], i) => {
+          const A = camMap[a], B = camMap[b];
+          if (!A || !B) return null;
           return (
             <line key={i} x1={A.x} y1={A.y} x2={B.x} y2={B.y}
               stroke="#334155" strokeWidth="2.5" strokeLinecap="round" opacity="0.55" />
@@ -353,7 +473,7 @@ function CityMap({ highlightPath = [], mode = "default", height = 420, activeCam
         })}
 
         {/* density heat glow */}
-        {mode === "density" && CAMERAS.map((c) => {
+        {mode === "density" && camerasList.map((c) => {
           const d = ZONE_DENSITY[c.zone] ?? 0.3;
           const color = d > 0.75 ? "#f43f5e" : d > 0.5 ? "#f59e0b" : d > 0.3 ? theme.hex : "#34d399";
           return (
@@ -363,7 +483,7 @@ function CityMap({ highlightPath = [], mode = "default", height = 420, activeCam
 
         {/* highlighted trajectory path */}
         {pathIds.slice(0, -1).map((id, i) => {
-          const A = CAM[id], B = CAM[pathIds[i + 1]];
+          const A = camMap[id], B = camMap[pathIds[i + 1]];
           if (!A || !B) return null;
           return (
             <line key={"hl" + i} x1={A.x} y1={A.y} x2={B.x} y2={B.y}
@@ -375,7 +495,7 @@ function CityMap({ highlightPath = [], mode = "default", height = 420, activeCam
         })}
 
         {/* camera nodes */}
-        {CAMERAS.map((c) => {
+        {camerasList.map((c) => {
           const inPath = pathSet.has(c.id);
           const order = pathIds.indexOf(c.id);
           const isActive = activeCamera === c.id;
@@ -428,21 +548,36 @@ function CityMap({ highlightPath = [], mode = "default", height = 420, activeCam
    1. OVERVIEW
    ====================================================================== */
 
-function Overview({ goTo }) {
+function Overview({ goTo, liveData }) {
   const theme = React.useContext(ThemeContext);
-  const stats = [
-    { icon: Camera, label: "ANPR Cameras Networked", value: "500+", tone: theme.key },
-    { icon: BadgeCheck, label: "OCR Recognition Accuracy", value: ">90%", tone: "emerald" },
-    { icon: Zap, label: "Trajectory Update Latency", value: "<2 sec", tone: "blue" },
-    { icon: Radar, label: "Junctions Monitored City-Wide", value: "180+", tone: "amber" },
-  ];
+  const isLive = liveData.status === "live";
+  const stats = isLive
+    ? [
+        { icon: Camera, label: "ANPR Cameras Networked (Live)", value: String(liveData.cameras.length), tone: theme.key },
+        { icon: BadgeCheck, label: "Avg. OCR Confidence (Live)", value: liveData.avgOcrConfidence != null ? `${liveData.avgOcrConfidence.toFixed(1)}%` : "—", tone: "emerald" },
+        { icon: Database, label: "Total ANPR Events Logged", value: String(liveData.totalEvents ?? 0), tone: "blue" },
+        { icon: Route, label: "Vehicles w/ Multi-Camera Route", value: String(liveData.totalVehiclesTracked ?? 0), tone: "amber" },
+      ]
+    : [
+        { icon: Camera, label: "ANPR Cameras Networked", value: "500+", tone: theme.key },
+        { icon: BadgeCheck, label: "OCR Recognition Accuracy", value: ">90%", tone: "emerald" },
+        { icon: Zap, label: "Trajectory Update Latency", value: "<2 sec", tone: "blue" },
+        { icon: Radar, label: "Junctions Monitored City-Wide", value: "180+", tone: "amber" },
+      ];
   return (
     <div className="space-y-8">
       <GlassCard glow className="overflow-hidden p-6 md:p-10">
         <div className={`pointer-events-none absolute -top-24 -right-24 h-72 w-72 rounded-full bg-${theme.c500}/10 blur-3xl`} />
         <div className="pointer-events-none absolute -bottom-24 -left-16 h-72 w-72 rounded-full bg-blue-500/10 blur-3xl" />
         <div className="relative">
-          <Badge tone="cyan">Smart India Hackathon 2026 · Smart Automation</Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone="cyan">Smart India Hackathon 2026 · Smart Automation</Badge>
+            {isLive ? (
+              <Badge tone="emerald">Connected to live route_tracker.py output</Badge>
+            ) : (
+              <Badge tone="slate">Demo data — pipeline output not reachable</Badge>
+            )}
+          </div>
           <h1 className="font-display mt-4 max-w-3xl text-3xl font-bold leading-tight text-slate-50 md:text-5xl">
             City-Wide AI Engine for <span className={`text-${theme.c400}`}>Multi-Camera ANPR</span> Trajectory Tracking &amp; Urban Traffic Analytics
           </h1>
@@ -641,18 +776,29 @@ function AnprModule() {
    3. TRAJECTORY TRACKING
    ====================================================================== */
 
-function TrajectoryTracking({ query, setQuery }) {
+function TrajectoryTracking({ query, setQuery, liveData }) {
   const theme = React.useContext(ThemeContext);
   const [active, setActive] = useState(null);
   const [hoverIdx, setHoverIdx] = useState(null);
 
-  const hits = useMemo(() => {
+  const result = useMemo(() => {
     const clean = query.replace(/\s+/g, "").toUpperCase();
     if (!clean) return null;
-    return SAMPLE_TRAJECTORIES[clean] || generateRoute(clean);
-  }, [query]);
+    const liveVehicle = (liveData.vehicles || []).find(
+      (v) => v.plate.replace(/\s+/g, "").toUpperCase() === clean
+    );
+    if (liveVehicle) return { list: liveVehicle.hits, isLive: true };
+    return { list: SAMPLE_TRAJECTORIES[clean] || generateRoute(clean), isLive: false };
+  }, [query, liveData]);
+
+  const hits = result ? result.list : null;
+  const isLive = result ? result.isLive : false;
+  const camMap = isLive ? liveData.camMap : CAM;
+  const camerasList = isLive ? liveData.cameras : CAMERAS;
+  const roads = isLive ? [] : ROADS;
 
   const samplePlates = Object.keys(SAMPLE_TRAJECTORIES);
+  const livePlates = (liveData.vehicles || []).map((v) => v.plate);
 
   return (
     <div className="space-y-6">
@@ -671,6 +817,12 @@ function TrajectoryTracking({ query, setQuery }) {
             />
           </div>
           <div className="flex flex-wrap gap-2">
+            {livePlates.map((p) => (
+              <button key={p} onClick={() => setQuery(p)}
+                className={`font-data rounded-md border border-emerald-700/50 bg-emerald-900/20 px-2.5 py-1.5 text-[11px] text-emerald-300 transition hover:border-emerald-400`}>
+                {p} <span className="opacity-60">live</span>
+              </button>
+            ))}
             {samplePlates.map((p) => (
               <button key={p} onClick={() => setQuery(p)}
                 className={`font-data rounded-md border border-slate-700 bg-slate-900/60 px-2.5 py-1.5 text-[11px] text-slate-400 transition hover:border-${theme.c500}/50 hover:text-${theme.c300}`}>
@@ -691,11 +843,15 @@ function TrajectoryTracking({ query, setQuery }) {
           <GlassCard className="p-4 lg:col-span-2">
             <div className="mb-3 flex items-center justify-between">
               <span className="font-data text-[11px] uppercase tracking-widest text-slate-500">Camera Hit Timeline</span>
-              <Badge tone="cyan">{hits.length} hits</Badge>
+              <div className="flex items-center gap-2">
+                {isLive && <Badge tone="emerald">live pipeline data</Badge>}
+                <Badge tone="cyan">{hits.length} hits</Badge>
+              </div>
             </div>
             <div className="max-h-[420px] space-y-1 overflow-y-auto pr-1">
               {hits.map((h, i) => {
-                const c = CAM[h.camera];
+                const c = camMap[h.camera];
+                if (!c) return null;
                 return (
                   <button key={i} onMouseEnter={() => setHoverIdx(i)} onMouseLeave={() => setHoverIdx(null)}
                     onClick={() => setActive(c.id)}
@@ -711,8 +867,8 @@ function TrajectoryTracking({ query, setQuery }) {
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 font-data text-[10.5px] text-slate-500">
                         <span className="flex items-center gap-1"><MapPin size={10} />{c.id}</span>
-                        <span className="flex items-center gap-1"><Gauge size={10} />{h.speed} km/h</span>
-                        <span className="flex items-center gap-1"><BadgeCheck size={10} />{h.confidence}%</span>
+                        <span className="flex items-center gap-1"><Gauge size={10} />{h.speed != null ? `${h.speed} km/h` : "—"}</span>
+                        <span className="flex items-center gap-1"><BadgeCheck size={10} />{h.confidence != null ? `${h.confidence}%` : "—"}</span>
                       </div>
                     </div>
                   </button>
@@ -733,7 +889,8 @@ function TrajectoryTracking({ query, setQuery }) {
                 })()}
               </Badge>
             </div>
-            <CityMap highlightPath={hits} activeCamera={active} onNodeClick={setActive} height={440} />
+            <CityMap highlightPath={hits} activeCamera={active} onNodeClick={setActive} height={440}
+              camMap={camMap} camerasList={camerasList} roads={roads} />
           </GlassCard>
         </div>
       )}
@@ -1059,22 +1216,44 @@ function ThemeSwitcher({ themeName, setThemeName, compact = false }) {
   );
 }
 
+function ModeToggle({ mode, setMode, compact = false }) {
+  const isLight = mode === "light";
+  return (
+    <button
+      onClick={() => setMode(isLight ? "dark" : "light")}
+      title={isLight ? "Switch to dark mode" : "Switch to light mode"}
+      aria-label={isLight ? "Switch to dark mode" : "Switch to light mode"}
+      className={`flex items-center gap-1.5 rounded-full border border-slate-800 bg-slate-900/60 font-data text-[10px] uppercase tracking-wider text-slate-300 transition hover:text-slate-100 ${compact ? "h-8 px-3" : "h-8 px-3"}`}
+    >
+      {isLight ? <Sun size={13} className="text-orange-500" /> : <Moon size={13} />}
+      <span className="hidden sm:inline">{isLight ? "Light" : "Dark"}</span>
+    </button>
+  );
+}
+
 function App() {
   const [themeName, setThemeName] = useState("cyan");
   const theme = THEMES[themeName];
+  const [mode, setMode] = useState("dark");
+  const isLight = mode === "light";
   const [section, setSection] = useState("overview");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [trajQuery, setTrajQuery] = useState("TN07AB1234");
   const now = useClock();
+  const liveData = useLiveData();
 
   const goTo = (id) => { setSection(id); setMobileOpen(false); };
   const trackPlate = (plate) => { setTrajQuery(plate); goTo("trajectory"); };
 
+  useEffect(() => {
+    document.body.style.background = isLight ? "#f6f1e7" : "#020617";
+  }, [isLight]);
+
   return (
     <ThemeContext.Provider value={theme}>
-    <div className="anpr-root min-h-screen bg-slate-950 text-slate-200">
+    <div className={`anpr-root min-h-screen text-slate-200 ${isLight ? "light bg-[#f6f1e7]" : "bg-slate-950"}`}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Fraunces:wght@500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap');
         .anpr-root { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; }
         .font-display { font-family: 'Space Grotesk', 'Inter', sans-serif; }
         .font-data { font-family: 'JetBrains Mono', ui-monospace, monospace; }
@@ -1086,6 +1265,61 @@ function App() {
             radial-gradient(circle at 15% 10%, rgba(${theme.rgb},0.06), transparent 40%),
             radial-gradient(circle at 85% 90%, rgba(59,130,246,0.07), transparent 40%);
         }
+
+        /* ==================================================================
+           LIGHT MODE — warm cream/paper theme, repaints the dark slate
+           utility classes used everywhere in the dashboard.
+           ================================================================== */
+        .anpr-root.light { color: #2a251d; }
+        .anpr-root.light .font-display { font-family: 'Fraunces', 'Space Grotesk', serif; }
+        .anpr-root.light ::-webkit-scrollbar-thumb { background: #ddd3bd; }
+        .anpr-root.light .bg-scan {
+          background-image:
+            radial-gradient(circle at 15% 10%, rgba(${theme.rgb},0.05), transparent 40%),
+            radial-gradient(circle at 85% 90%, rgba(217,119,87,0.06), transparent 40%);
+        }
+
+        /* surfaces, darkest -> lightest */
+        .anpr-root.light .bg-slate-950,
+        .anpr-root.light .bg-slate-950\\/40,
+        .anpr-root.light .bg-slate-950\\/50,
+        .anpr-root.light .bg-slate-950\\/60,
+        .anpr-root.light .bg-slate-950\\/70,
+        .anpr-root.light .bg-slate-950\\/80 { background-color: #fbf8f2 !important; }
+
+        .anpr-root.light .bg-slate-900,
+        .anpr-root.light .bg-slate-900\\/40,
+        .anpr-root.light .bg-slate-900\\/60 { background-color: #ffffff !important; }
+
+        .anpr-root.light .bg-slate-800,
+        .anpr-root.light .bg-slate-800\\/40 { background-color: #f1ebdd !important; }
+
+        .anpr-root.light .bg-slate-700,
+        .anpr-root.light .bg-slate-700\\/30 { background-color: #e9e1cd !important; }
+
+        .anpr-root.light .bg-slate-500 { background-color: #cabfa4 !important; }
+
+        /* borders */
+        .anpr-root.light .border-slate-800,
+        .anpr-root.light .border-slate-800\\/60,
+        .anpr-root.light .border-slate-800\\/80,
+        .anpr-root.light .border-slate-700,
+        .anpr-root.light .border-slate-600,
+        .anpr-root.light .border-slate-600\\/40 { border-color: #e7ddc4 !important; }
+
+        /* text */
+        .anpr-root.light .text-slate-50,
+        .anpr-root.light .text-slate-100,
+        .anpr-root.light .text-slate-200 { color: #241f18 !important; }
+        .anpr-root.light .text-slate-300 { color: #47402f !important; }
+        .anpr-root.light .text-slate-400 { color: #756c56 !important; }
+        .anpr-root.light .text-slate-500 { color: #8a8069 !important; }
+        .anpr-root.light .text-slate-600 { color: #a29979 !important; }
+
+        .anpr-root.light .ring-offset-slate-950 { --tw-ring-offset-color: #fbf8f2 !important; }
+        .anpr-root.light .divide-slate-800 > :not([hidden]) ~ :not([hidden]) { border-color: #e7ddc4 !important; }
+        .anpr-root.light .shadow-2xl,
+        .anpr-root.light .shadow-xl { box-shadow: 0 8px 30px -12px rgba(120,105,70,0.18) !important; }
       `}</style>
 
       <div className="bg-scan flex min-h-screen">
@@ -1112,6 +1346,12 @@ function App() {
           </nav>
           <div className="space-y-3 border-t border-slate-800/80 px-4 py-4">
             <div>
+              <div className="mb-1.5 font-data text-[9.5px] uppercase tracking-widest text-slate-600">Appearance</div>
+              <div className="flex items-center gap-2">
+                <ModeToggle mode={mode} setMode={setMode} />
+              </div>
+            </div>
+            <div>
               <div className="mb-1.5 font-data text-[9.5px] uppercase tracking-widest text-slate-600">Theme</div>
               <ThemeSwitcher themeName={themeName} setThemeName={setThemeName} />
             </div>
@@ -1137,6 +1377,9 @@ function App() {
                   <span className="font-display text-sm font-bold text-slate-100">TrackNet</span>
                 </div>
                 <button onClick={() => setMobileOpen(false)} className="text-slate-500"><X size={18} /></button>
+              </div>
+              <div className="mb-4 flex items-center gap-2">
+                <ModeToggle mode={mode} setMode={setMode} />
               </div>
               <div className="mb-4">
                 <div className="mb-1.5 font-data text-[9.5px] uppercase tracking-widest text-slate-600">Theme</div>
@@ -1170,14 +1413,17 @@ function App() {
             </div>
             <div className="flex items-center gap-3">
               <div className="hidden lg:block">
+                <ModeToggle mode={mode} setMode={setMode} compact />
+              </div>
+              <div className="hidden lg:block">
                 <ThemeSwitcher themeName={themeName} setThemeName={setThemeName} compact />
               </div>
-              <div className="hidden items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 font-data text-[10px] text-emerald-300 sm:flex">
+              <div className={`hidden items-center gap-1.5 rounded-full border px-3 py-1 font-data text-[10px] sm:flex ${liveData.status === "live" ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" : "border-slate-600/40 bg-slate-800/40 text-slate-400"}`}>
                 <span className="relative flex h-1.5 w-1.5">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  <span className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${liveData.status === "live" ? "animate-ping bg-emerald-400" : "bg-slate-500"}`} />
+                  <span className={`relative inline-flex h-1.5 w-1.5 rounded-full ${liveData.status === "live" ? "bg-emerald-400" : "bg-slate-500"}`} />
                 </span>
-                SYSTEM ONLINE
+                {liveData.status === "live" ? "LIVE PIPELINE" : liveData.status === "loading" ? "CONNECTING…" : "DEMO MODE"}
               </div>
               <div className="font-data hidden text-xs text-slate-400 md:block">
                 {now.toLocaleTimeString("en-IN", { hour12: false })}
@@ -1186,9 +1432,9 @@ function App() {
           </header>
 
           <main className="px-4 py-6 md:px-8 md:py-8">
-            {section === "overview" && <Overview goTo={goTo} />}
+            {section === "overview" && <Overview goTo={goTo} liveData={liveData} />}
             {section === "anpr" && <AnprModule />}
-            {section === "trajectory" && <TrajectoryTracking query={trajQuery} setQuery={setTrajQuery} />}
+            {section === "trajectory" && <TrajectoryTracking query={trajQuery} setQuery={setTrajQuery} liveData={liveData} />}
             {section === "analytics" && <TrafficAnalytics />}
             {section === "alerts" && <AlertSystem onTrack={trackPlate} />}
             {section === "about" && <AboutTeam />}
